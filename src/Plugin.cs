@@ -1,12 +1,9 @@
 ﻿using BepInEx;
 using MonoMod.Cil;
-using RWCustom;
-using System;
-using UnityEngine;
 
 namespace MovementTweaks;
 
-[BepInPlugin("zombieseatflesh7.MovementTweaks", "Movement Tweaks", "1.0.0")]
+[BepInPlugin("zombieseatflesh7.MovementTweaks", "Movement Tweaks", "1.1.0")]
 sealed class Plugin : BaseUnityPlugin
 {
     public static new BepInEx.Logging.ManualLogSource Logger;
