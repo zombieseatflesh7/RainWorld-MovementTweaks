@@ -1,9 +1,12 @@
 ﻿using BepInEx;
 using MonoMod.Cil;
+using System.Security.Permissions;
+
+[assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)]
 
 namespace MovementTweaks;
 
-[BepInPlugin("zombieseatflesh7.MovementTweaks", "Movement Tweaks", "1.1.0")]
+[BepInPlugin("zombieseatflesh7.MovementTweaks", "Movement Tweaks", "1.2.0")]
 sealed class Plugin : BaseUnityPlugin
 {
     public static new BepInEx.Logging.ManualLogSource Logger;
@@ -13,6 +16,7 @@ sealed class Plugin : BaseUnityPlugin
         Logger = base.Logger;
 
         On.RainWorld.OnModsInit += OnModsInit;
+
         Hooks.InitHooks();
     }
 
