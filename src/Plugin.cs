@@ -6,7 +6,7 @@ using System.Security.Permissions;
 
 namespace MovementTweaks;
 
-[BepInPlugin("zombieseatflesh7.MovementTweaks", "Movement Tweaks", "1.2.0")]
+[BepInPlugin("zombieseatflesh7.MovementTweaks", "Movement Tweaks", "1.2.3")]
 sealed class Plugin : BaseUnityPlugin
 {
     public static new BepInEx.Logging.ManualLogSource Logger;

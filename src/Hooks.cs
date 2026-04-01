@@ -39,9 +39,13 @@ namespace MovementTweaks
             }
             if (self.room.terrain != null)
             {
-                Vector2 center = self.bodyChunks[bChunk].pos + new Vector2(relativeX, relativeY);
+                Vector2 vector = self.bodyChunks[bChunk].pos + new Vector2(relativeX, relativeY);
                 float rad = self.bodyChunks[bChunk].rad;
-                return self.room.terrain.SnapToTerrain(center, rad).y - center.y > rad;
+                if (self.room.terrain.TrySnapToTerrain(vector, rad, out var snapPos))
+                {
+                    return Vector2.Distance(snapPos, vector) > rad;
+                }
+                return false;
             }
             return false;
         }
@@ -380,14 +384,15 @@ namespace MovementTweaks
                         head.vel.x += Mathf.Clamp(p.upOnHorizontalBeamPos.x - head.pos.x, -2f, 2f); // move head towards pullup position
 
                         // raise legs
-                        // for context: 17 is the distance between a slugcats head and legs bodychunks
                         // the purpose of this math is to make sure the legs travel in a perfect circular arc, and prevent them from pulling the scug left or right
                         Vector2 pivot = new Vector2(p.upOnHorizontalBeamPos.x, head.pos.y);
+                        float body_length = p.bodyChunkConnections[0].distance;
+                        float speed = Mathf.Sqrt(body_length / 17f) * 5f;
                         float angle1 = Mathf.Atan2(feet.pos.y - pivot.y, feet.pos.x - pivot.x); // angle from pivot to legs
-                        float angle2 = angle1 + (5f / 17f) * p.flipDirection; // angle that slugcat would be at if it's legs moved 5 units
+                        float angle2 = angle1 + (speed / body_length) * p.flipDirection; // angle that slugcat would be at if it's legs moved "speed" units
                         float distance = (feet.pos - pivot).magnitude; // distance from pivot to legs
-                        float angle = Mathf.Atan2(17f*Mathf.Sin(angle2) - distance*Mathf.Sin(angle1) + p.gravity, 17f*Mathf.Cos(angle2) - distance*Mathf.Cos(angle1)); // angle of force
-                        feet.vel = Vector2.MoveTowards(feet.vel, new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * 5f, 2f); // apply force to legs
+                        float angle = Mathf.Atan2(body_length * Mathf.Sin(angle2) - distance*Mathf.Sin(angle1) + p.gravity, body_length * Mathf.Cos(angle2) - distance*Mathf.Cos(angle1)); // angle of force
+                        feet.vel = Vector2.MoveTowards(feet.vel, new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * speed, 2f); // apply force to legs
                     }
                     return false;
                 });

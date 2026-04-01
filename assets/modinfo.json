@@ -1,8 +1,8 @@
 {
 	"id": "MovementTweaks",
 	"name": "Movement Tweaks",
-	"version": "1.2.0",
-	"target_game_version": "v1.10",
+	"version": "1.2.3",
+	"target_game_version": "v1.11.7",
 	"authors": "Zombieseatflesh7",
 	"description": "Fixes some glitches and jankyness with the movement system,<LINE>while remaining faithful to the base game.<LINE>Includes several optional movement features.",
 	"requirements": [],
