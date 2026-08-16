@@ -69,14 +69,16 @@ namespace MovementTweaks
                 c.GotoNext(i => i.MatchLdarg(0));
                 c.GotoNext();
                 c.RemoveRange(5);
-                c.EmitDelegate<Func<Player, bool>>(player => {
+                c.EmitDelegate<Func<Player, bool>>(player =>
+                {
                     return player.bodyChunks[0].ContactPoint.x != 0 && (!Options.fastWallSlide.Value || player.input[0].y > -1);
                 });
-                
+
                 // repeat again with bast.bodyChunks[1]
                 c.GotoNext(i => i.MatchStindR4()); c.Goto(c.Index + 2);
                 c.RemoveRange(5);
-                c.EmitDelegate<Func<Player, bool>>(player => {
+                c.EmitDelegate<Func<Player, bool>>(player =>
+                {
                     return player.bodyChunks[1].ContactPoint.x != 0 && (!Options.fastWallSlide.Value || player.input[0].y > -1);
                 });
             }
@@ -124,9 +126,9 @@ namespace MovementTweaks
                 // EMIT FUNCTION HERE
                 // IL_27bd: ldfld int32 Player::canWallJump
                 c.Goto(c.Index + 2);
-                c.EmitDelegate<Func<Player, bool>>(p => 
+                c.EmitDelegate<Func<Player, bool>>(p =>
                 {
-                    if( p.canWallJump != 0 && ( // auto wall climb check
+                    if (p.canWallJump != 0 && ( // auto wall climb check
                         Options.autoWallClimbMode.Value switch { 0 => false, 1 => true, 2 => p.input[0].jmp, 3 => p.input[0].y >= 1, _ => false } // config check
                         && p.input[0].x != 0 && p.bodyChunks[0].ContactPoint.x == p.input[0].x && p.input[0].y >= 0 // pushing against wall check
                         && p.bodyChunks[0].vel.y + p.bodyChunks[1].vel.y < 6f // y velocity check
@@ -223,11 +225,20 @@ namespace MovementTweaks
 
                     Room room = p.room;
                     Vector2 headPos = p.bodyChunks[0].pos;
+                    Vector2 legsPos = p.bodyChunks[1].pos;
 
                     if (room.GetTile(headPos + new Vector2(0, 20f)).Terrain is TerrainType.Solid or TerrainType.Slope) // block above head - can't do pullup
                         return false;
 
-                    bool valid = false;
+                    p.upOnHorizontalBeamPos = new Vector2(headPos.x, room.MiddleOfTile(headPos).y + 20f); // pullup position affects how the slugcat moves during the animation
+
+                    // nudge pullup position so we don't smash our heads into a block
+                    if (room.GetTile(p.upOnHorizontalBeamPos + new Vector2(-9f, 0f)).Terrain is TerrainType.Solid or TerrainType.Slope) // check if too close to a tile on the top-left
+                        p.upOnHorizontalBeamPos.x = room.MiddleOfTile(p.upOnHorizontalBeamPos).x - 1f;
+                    else if (room.GetTile(p.upOnHorizontalBeamPos + new Vector2(9f, 0f)).Terrain is TerrainType.Solid or TerrainType.Slope) // check if too close to a tile on the top-right
+                        p.upOnHorizontalBeamPos.x = room.MiddleOfTile(p.upOnHorizontalBeamPos).x + 1f;
+
+                    // decide pullup direction
                     p.straightUpOnHorizontalBeam = Options.pullupDirectionMode.Value switch
                     {
                         0 => false,
@@ -235,49 +246,52 @@ namespace MovementTweaks
                         2 => true,
                         _ => false
                     };
-                    p.upOnHorizontalBeamPos = new Vector2(headPos.x, room.MiddleOfTile(headPos).y + 20f); // pullup position affects how the slugcat moves during the animation
+                    bool manual = Options.pullupDirectionMode.Value == 1;
 
-                    if (room.GetTile(p.upOnHorizontalBeamPos + new Vector2(-9f, 0f)).Terrain is TerrainType.Solid or TerrainType.Slope) // check if too close to a tile on the left
-                        p.upOnHorizontalBeamPos.x = room.MiddleOfTile(p.upOnHorizontalBeamPos).x - 1f;
-                    else if (room.GetTile(p.upOnHorizontalBeamPos + new Vector2(10f, 0f)).Terrain is TerrainType.Solid or TerrainType.Slope) // check if too close to a tile on the right
-                        p.upOnHorizontalBeamPos.x = room.MiddleOfTile(p.upOnHorizontalBeamPos).x + 1f;
+                    // TODO: account for slugpups smaller bodies
 
-                    if (!p.straightUpOnHorizontalBeam
-                        && room.GetTile(headPos + new Vector2(p.flipDirection * 20f, 0f)).horizontalBeam
-                        && !(room.GetTile(headPos + new Vector2(p.flipDirection * 20f, 0f)).Terrain is TerrainType.Solid or TerrainType.Slope) // no horizontaly adjacent block or slope
-                        && !(room.GetTile(headPos + new Vector2(p.flipDirection * 20f, 20f)).Terrain is TerrainType.Solid or TerrainType.Slope) // no diagonaly adjacent block or slope
-                        )
+                    // check if horizontal pullup possible
+                    bool canPullup(int direction)
                     {
-                        valid = true;
-                    }
-                    else if (!p.straightUpOnHorizontalBeam
-                        && room.GetTile(headPos + new Vector2(-p.flipDirection * 20f, 0f)).horizontalBeam // reversed direction
-                        && !(room.GetTile(headPos + new Vector2(-p.flipDirection * 20f, 0f)).Terrain is TerrainType.Solid or TerrainType.Slope) // no horizontaly adjacent block or slope
-                        && !(room.GetTile(headPos + new Vector2(-p.flipDirection * 20f, 20f)).Terrain is TerrainType.Solid or TerrainType.Slope) // no diagonaly adjacent block or slope
-                        )
-                    {
-                        p.flipDirection *= -1;
-                        valid = true;
-                    }
-                    else
-                    { 
-                        p.straightUpOnHorizontalBeam = true;
-                        valid = true;
-                    } 
+                        // not possible to stand here
+                        if (!room.GetTile(headPos + new Vector2(direction * 20f, 0f)).horizontalBeam // no beam
+                        || (room.GetTile(headPos + new Vector2(direction * 20f, 0f)).Terrain is TerrainType.Solid or TerrainType.Slope) // block or slope covering the beam
+                        || (room.GetTile(headPos + new Vector2(direction * 20f, 20f)).Terrain is TerrainType.Solid or TerrainType.Slope)) // block or slope above where i want to stand
+                            return false;
 
-                    if (valid)
-                    {
-                        if (!p.straightUpOnHorizontalBeam) // if horizontal pullup
-                            if (!room.GetTile(headPos + new Vector2(p.flipDirection * 25f, 0f)).horizontalBeam // too close to beam edge
-                                || room.GetTile(headPos + new Vector2(p.flipDirection * 25f, 0f)).Terrain is TerrainType.Solid or TerrainType.Slope // too close to horizontaly adjacent block or slope
-                                || room.GetTile(headPos + new Vector2(p.flipDirection * 25f, 20f)).Terrain is TerrainType.Solid // too close to diagonaly adjacent block
-                                )
-                                p.upOnHorizontalBeamPos.x = room.MiddleOfTile(p.upOnHorizontalBeamPos).x + 5f * p.flipDirection; // shift back slightly
+                        bool legsUp = legsPos.y - p.upOnHorizontalBeamPos.y > -25; // legs reach beam. this means the player is completely horizontal
+                        if (legsUp && (legsPos.x - headPos.x) * direction > 0) // legs are already right where they need to be
+                            return true;
 
-                        room.PlaySound(SoundID.Slugcat_Get_Up_On_Horizontal_Beam, p.mainBodyChunk, loop: false, 1f, 1f);
-                        p.animation = Player.AnimationIndex.GetUpOnBeam;
-                        p.pullupSoftlockSafety = 0;
+                        // can't rotate to stand here because blocks are in the way
+                        else if (room.GetTile(headPos + new Vector2(direction * 20f, -20f)).Terrain is TerrainType.Solid or TerrainType.Slope // block below the beam i want to stand on
+                            || room.GetTile(headPos + new Vector2(0, -20f)).Terrain is TerrainType.Solid or TerrainType.Slope // block below my head
+                            || (legsUp && (legsPos.x - headPos.x) * direction < 0 && room.GetTile(legsPos + new Vector2(direction * -4f, -20f)).Terrain is TerrainType.Solid or TerrainType.Slope)) // most likely halfway in a pipe
+                            return false;
+
+                        return true;
                     }
+
+                    // can't pullup in the desired direction
+                    if (!p.straightUpOnHorizontalBeam && !canPullup(p.flipDirection))
+                    {
+                        if (!manual && canPullup(-p.flipDirection))
+                            p.flipDirection *= -1;
+                        else
+                            p.straightUpOnHorizontalBeam = true;
+                    }
+
+                    // nudge horizontal pullups so we don't fall or slam into a wall
+                    if (!p.straightUpOnHorizontalBeam && (
+                        !room.GetTile(headPos + new Vector2(p.flipDirection * 25f, 0f)).horizontalBeam // too close to beam edge
+                        || room.GetTile(headPos + new Vector2(p.flipDirection * 25f, 0f)).Terrain is TerrainType.Solid or TerrainType.Slope // too close to horizontaly adjacent block or slope
+                        || room.GetTile(headPos + new Vector2(p.flipDirection * 25f, 20f)).Terrain is TerrainType.Solid // too close to diagonaly adjacent block
+                        )) // NOTE: 25 is the distance from the middle of the head to the base of the feet FOR ADULT SCUGS
+                        p.upOnHorizontalBeamPos.x = room.MiddleOfTile(p.upOnHorizontalBeamPos).x + 5f * p.flipDirection; // shift back slightly
+
+                    room.PlaySound(SoundID.Slugcat_Get_Up_On_Horizontal_Beam, p.mainBodyChunk, loop: false, 1f, 1f);
+                    p.animation = Player.AnimationIndex.GetUpOnBeam;
+                    p.pullupSoftlockSafety = 0;
                     return false;
                 });
                 // if the last function returns false, skip the vanilla pullup code
@@ -297,7 +311,7 @@ namespace MovementTweaks
                         return true;
 
                     p.pullupSoftlockSafety++;
-                    if (p.pullupSoftlockSafety > 80)
+                    if (p.pullupSoftlockSafety > 60)
                     {
                         Custom.Log("Pullup softlock safety");
                         p.room.PlaySound(SoundID.Slugcat_Turn_In_Corridor, p.mainBodyChunk, loop: false, 1f, 1f);
@@ -323,7 +337,8 @@ namespace MovementTweaks
 
                     if (p.straightUpOnHorizontalBeam) // VERTICAL PULLUP
                     {
-                        if (room.GetTile(feet.pos).horizontalBeam && feet.pos.y > p.upOnHorizontalBeamPos.y - 25f) // legs reach beam
+                        if (room.GetTile(feet.pos).horizontalBeam && feet.pos.y > p.upOnHorizontalBeamPos.y - 25f // legs reach beam
+                        && !(room.GetTile(feet.pos + new Vector2(0f, 20f)).Terrain is TerrainType.Solid)) // no block above legs
                         {
                             // complete pullup
                             p.noGrabCounter = 15;
@@ -339,12 +354,12 @@ namespace MovementTweaks
                         // move towards pullup position
                         head.vel.y += 3.2f;
                         head.vel.x += Mathf.Clamp(p.upOnHorizontalBeamPos.x - head.pos.x, -1f, 1f);
-                        feet.vel.x = Mathf.MoveTowards(feet.vel.x, Mathf.Clamp(p.upOnHorizontalBeamPos.x - feet.pos.x, -1f, 1f), 0.5f);
+                        feet.vel.x = Mathf.MoveTowards(feet.vel.x, Mathf.Clamp(p.upOnHorizontalBeamPos.x - feet.pos.x, -2f, 2f), 0.5f); // this formula produces slightly odd looking movement
                     }
                     else // HORIZONTAL PULLUP
                     {
                         head.pos.y = p.room.MiddleOfTile(head.pos).y; // lock head to beam
-                        
+
                         if (feet.ContactPoint.y > 0) // feet collide with something above (this never triggers on blocks, because the pullup counts as complete before it happens)
                         {
                             if (!room.GetTile(head.pos + new Vector2(0f, 20f)).Solid)
@@ -385,25 +400,26 @@ namespace MovementTweaks
 
                         // raise legs
                         // the purpose of this math is to make sure the legs travel in a perfect circular arc, and prevent them from pulling the scug left or right
+                        // probably overcomplicated. appears too stiff in practice.
                         Vector2 pivot = new Vector2(p.upOnHorizontalBeamPos.x, head.pos.y);
                         float body_length = p.bodyChunkConnections[0].distance;
                         float speed = Mathf.Sqrt(body_length / 17f) * 5f;
                         float angle1 = Mathf.Atan2(feet.pos.y - pivot.y, feet.pos.x - pivot.x); // angle from pivot to legs
                         float angle2 = angle1 + (speed / body_length) * p.flipDirection; // angle that slugcat would be at if it's legs moved "speed" units
                         float distance = (feet.pos - pivot).magnitude; // distance from pivot to legs
-                        float angle = Mathf.Atan2(body_length * Mathf.Sin(angle2) - distance*Mathf.Sin(angle1) + p.gravity, body_length * Mathf.Cos(angle2) - distance*Mathf.Cos(angle1)); // angle of force
+                        float angle = Mathf.Atan2(body_length * Mathf.Sin(angle2) - distance * Mathf.Sin(angle1) + p.gravity, body_length * Mathf.Cos(angle2) - distance * Mathf.Cos(angle1)); // angle of force
                         feet.vel = Vector2.MoveTowards(feet.vel, new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * speed, 2f); // apply force to legs
                     }
                     return false;
                 });
 
                 // if the last function returns false, skip the vanilla pullup code
-                ILLabel label = c.DefineLabel(); 
+                ILLabel label = c.DefineLabel();
                 c.Emit(OpCodes.Brtrue, label);
                 c = c.Emit(OpCodes.Ret);
                 c.MarkLabel(label);
 
-            } 
+            }
             catch (Exception e)
             {
                 Plugin.Logger.LogError(e.Message + "\n" + e.StackTrace);
